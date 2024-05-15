@@ -23,6 +23,7 @@
  *
  * ---------------------------------------------------------------------------------
  *
+ * Oh, where to start....
  *
  * -- Dmitry Nekrasov <bluebag@yandex.ru>   Sat, 13 Apr 2024 13:44:32 +0300
  */
@@ -34,7 +35,11 @@ module sdft #(
   parameter                 DW         = 16,
   parameter                 CW         = 16,
   parameter                 IDW        = 32,
-  parameter                 OW         = 32,
+  // Output bit width OW is always equals IDW. If the system requires different
+  // bit width, there is another module (adjust_bitwidth) made for this purpose
+  // and comes along with this module. Just use it after this module if
+  // frequency domain data bit width is supposed to be other than IDW
+  parameter                 OW         = IDW,
   parameter                 HANNING_EN = 0,
   // see ../README.md --> Stability / noise section
   parameter                 FIX_EN     = 1,
@@ -42,7 +47,7 @@ module sdft #(
   parameter                 AW         = $clog2(N),
   // The default is external, because external dual port ROM with
   // twiddles can be shared with some other device
-  parameter EXTERNAL_TWIDDLE_ROM       = "False",
+  parameter EXTERNAL_TWIDDLE_SOURCE    = "False",
   parameter TWIDDLE_ROM_FILE           = "none"
 ) (
   input                   clk_i,
@@ -51,8 +56,8 @@ module sdft #(
   // Input time domain data
   input signed  [DW-1:0]   data_i, // should be stable until next tick
   // Twiddle ROM interface
-  output logic [AW-1:0]   rdaddr_o,
-  input        [CW*2-1:0] rddata_i,
+  output logic [AW-1:0]   twiddle_idx_o,
+  input        [CW*2-1:0] twiddle_i,
   // Output frequency domain data
   output logic [OW*2-1:0] data_o,
   output logic            sob_o, // start of block
@@ -216,6 +221,7 @@ rotator #(
   .y_im          ( y_im                 )
 );
 
+//**************************************************************************
 
 generate
   if( HANNING_EN )
@@ -249,11 +255,15 @@ generate
     end // no_hanning
 endgenerate
 
-assign data_o[OW-1:0]    = { `sign(y_out_re), y_out_re[OW-2:0] };
-assign data_o[OW*2-1:OW] = { `sign(y_out_im), y_out_im[OW-2:0] };
+assign data_o = { y_out_im, y_out_re };
+
+//**************************************************************************
+
+// You can use my cordic to generate twiddles instead of wasting memory:
+// https://github.com/nekrasov-d/cordic-based-math#sine--cosine-generator
 
 generate
-  if( EXTERNAL_TWIDDLE_ROM != "True" )
+  if( EXTERNAL_TWIDDLE_SOURCE != "True" )
     begin : internal_twiddle_rom
       rom #(
         .DWIDTH        ( CW*2                  ),
@@ -267,8 +277,8 @@ generate
     end // internal_twiddle_rom
   else
     begin : external_twiddle_rom
-      assign rdaddr_o       = counter;
-      assign { w_im, w_re } = rddata_i;
+      assign twiddle_idx_o  = counter;
+      assign { w_im, w_re } = twiddle_i;
     end // external_twiddle_rom
 endgenerate
 
