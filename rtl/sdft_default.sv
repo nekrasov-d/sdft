@@ -139,7 +139,7 @@ always_ff @( posedge clk_i )
   if( sample_tick_i )
     xn <= data_i;
 
-ram #(
+ram_sdft #(
   .DWIDTH         ( DW                          ),
   .AWIDTH         ( XZ_MEM_AW                   )
 ) xz_mem (
@@ -169,7 +169,7 @@ endgenerate
 //***************************************************************************
 // Resonator loop
 
-ram #(
+ram_sdft #(
   .DWIDTH         ( IDW*2                       ),
   .AWIDTH         ( AW                          )
 ) product_mem (
@@ -191,7 +191,7 @@ ram #(
 assign y_comb_re_unsat = y_prev_re + comb;
 assign y_comb_im       = y_prev_im;
 
-sat #( .IW(IDW+1), .OW(IDW) ) comb_sat ( y_comb_re_unsat, y_comb_re, sat_alarm_o );
+sat_sdft #( .IW(IDW+1), .OW(IDW) ) comb_sat ( y_comb_re_unsat, y_comb_re, sat_alarm_o );
 
 generate
   if( FIX_EN )
@@ -287,7 +287,7 @@ endgenerate
 generate
   if( EXTERNAL_TWIDDLE_SOURCE != "True" )
     begin : internal_twiddle_rom
-      rom #(
+      rom_sdft #(
         .DWIDTH        ( CW*2                  ),
         .AWIDTH        ( AW                    ),
         .INIT_FILE     ( TWIDDLE_ROM_FILE      )

@@ -79,7 +79,7 @@ localparam M = 5;
 logic [OW-1:0] acc_sat;
 logic sat_alarm;
 
-sat #( .IW(DW+AW-5), .OW(OW) ) sat ( acc[DW+AW-1:5], acc_sat, sat_alarm );
+sat_sdft #( .IW(DW+AW-5), .OW(OW) ) sat ( acc[DW+AW-1:5], acc_sat, sat_alarm );
 
 always_ff @( posedge clk_i )
   if( eob_d )

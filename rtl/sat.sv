@@ -31,7 +31,7 @@
 
 `include "defines.vh"
 
-module sat #(
+module sat_sdft #(
   parameter IW = 10,
   parameter OW = 9
 ) (

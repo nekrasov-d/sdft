@@ -30,7 +30,7 @@
  * -- Dmitry Nekrasov <bluebag@yandex.ru>   Sun, 07 Apr 2024 14:10:40 +0300
  */
 
-module rom #(
+module rom_sdft #(
   parameter DWIDTH   = 16,
   parameter AWIDTH    = 9,
   parameter INIT_FILE = "some_file.mem"

@@ -35,7 +35,7 @@
  * -- Dmitry Nekrasov <bluebag@yandex.ru>   Sun, 07 Apr 2024 14:10:40 +0300
  */
 
-module ram #(
+module ram_sdft #(
   parameter DWIDTH   = 16,
   parameter NWORDS   = 0, // <--+----one of these two must be set
   parameter AWIDTH   = 0, // <--+

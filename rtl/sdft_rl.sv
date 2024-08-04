@@ -167,7 +167,7 @@ always_ff @( posedge clk_i )
   if( sample_tick_i )
     xn <= clear ? '0 : data_i;
 
-ram #(
+ram_sdft #(
   .DWIDTH         ( DW                          ),
   .AWIDTH         ( XZ_MEM_AW                   )
 ) xz_mem (
@@ -191,7 +191,7 @@ logic signed [IDW+1:0]  tmp_sum1;
 logic signed [IDW+2:0]  tmp_sum2;
 logic signed [IDW-1:0]  y, y_z1, y_z2;
 
-ram #(
+ram_sdft #(
   .DWIDTH         ( IDW*2                       ),
   .AWIDTH         ( AW                          )
 ) resonators_memory (
@@ -209,7 +209,7 @@ assign y_z1_2cos      = y_z1_2cos_mult >> (CW-1);
 assign tmp_sum1 = comb + y_z1_2cos;
 assign tmp_sum2 = tmp_sum1 - y_z2;
 
-sat #( .IW(IDW+3), .OW(IDW) ) y_sat ( tmp_sum2, y, sat_alarm_1 );
+sat_sdft #( .IW(IDW+3), .OW(IDW) ) y_sat ( tmp_sum2, y, sat_alarm_1 );
 
 //**************************************************************************
 // Feedforward stage
@@ -228,7 +228,7 @@ assign y_cos      = y_cos_mult >> (CW-1);
 assign y_sin      = y_sin_mult >> (CW-1);
 assign tmp_sum3   = y_cos - y_z1;
 
-sat #( .IW(IDW+2), .OW(IDW) ) fd_real_sat ( tmp_sum3, fd_real, sat_alarm_2 );
+sat_sdft #( .IW(IDW+2), .OW(IDW) ) fd_real_sat ( tmp_sum3, fd_real, sat_alarm_2 );
 
 assign fd_imag = y_sin;
 
@@ -298,7 +298,7 @@ endgenerate
 generate
   if( EXTERNAL_TWIDDLE_SOURCE != "True" )
     begin : internal_twiddle_rom
-      rom #(
+      rom_sdft #(
         .DWIDTH        ( CW*2                  ),
         .AWIDTH        ( AW                    ),
         .INIT_FILE     ( TWIDDLE_ROM_FILE      )
