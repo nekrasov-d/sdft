@@ -72,18 +72,18 @@ class SdftInt:
         self.y_prev      = np.zeros( N, dtype=complex )
         self.w           = twiddle_generator_int( N, 'inverse', bitwidth )
 
-    def hann_in_freq( self, y ):
-        y[0] = 0.5 * y[0] - 0.25 * y[1]
+    def hann_in_freq( self, x ):
+        y = np.zeros_like( x )
+        y[0] = 0.5 * x[0] - 0.25 * x[1]
         for n in range( 1, self.N-1 ):
-            y[n] = 0.5 * y[n] - 0.25 * ( y[n-1] + y[n+1])
-        y[self.N-1] = 0.5 * y[self.N-1] - 0.25 * y[self.N-2]
+            y[n] = 0.5 * x[n] - 0.25 * ( x[n-1] + x[n+1])
+        y[self.N-1] = 0.5 * x[self.N-1] - 0.25 * x[self.N-2]
         return y
 
     def __call__( self, xn ):
         xz     = self.x[-1]
         self.x = np.append( xn, self.x[:-1] )
         comb   = complex( xn-xz, 0. ) # bitwidth + 1
-        print( int(round(comb.real)) )
         y = np.zeros( self.N, dtype=complex )
         for n in range( self.N ):
             y_comb  = comb + self.y_prev[n] # bitwidth + 2
@@ -94,6 +94,92 @@ class SdftInt:
             y = self.hann_in_freq( y )
         return y
 
+
+# Real input complex output
+# Limited precision model. Maybe it sould be merged with Sdft. Now it doesn't
+# seem desirable. Names are kept close to same signals in Verilog (../rtl/sdft.sv)
+# Rick Lyons architecture
+class SdftIntRL:
+    def __init__( self, N, bitwidth=32, hanning_en=False ):
+        self.bitwidth    = bitwidth
+        self.scale       = 2**(bitwidth-1)
+        self.N           = N
+        self.hanning_en  = hanning_en
+        self.x           = np.zeros( N, dtype=int )
+        self.y_z1        = np.zeros( N, dtype=int )
+        self.y_z2        = np.zeros( N, dtype=int )
+        self.w           = twiddle_generator_int( N, 'inverse', bitwidth )
+
+    def hann_in_freq( self, x ):
+        y = np.zeros_like( x )
+        y[0] = 0.5 * x[0] - 0.25 * x[1]
+        for n in range( 1, self.N-1 ):
+            y[n] = 0.5 * x[n] - 0.25 * ( x[n-1] + x[n+1])
+        y[self.N-1] = 0.5 * x[self.N-1] - 0.25 * x[self.N-2]
+        return y
+
+    def __call__( self, xn ):
+        xz     = self.x[-1]
+        self.x = np.append( xn, self.x[:-1] )
+        comb   = xn-xz
+        y = np.zeros( self.N, dtype=int )
+        y_fd_real = np.zeros( self.N, dtype=int )
+        y_fd_imag = np.zeros( self.N, dtype=int )
+        # Resonator loop
+        for n in range( self.N ):
+            # Real resonator loop
+            y_z1_2cos = round( self.y_z1[n] * 2 * self.w[n].real / self.scale )
+            y[n]     = comb + y_z1_2cos - self.y_z2[n]
+            # Feedforward stage
+            y_fd_real[n] = round( y[n] * self.w[n].real / self.scale ) - self.y_z1[n]
+            y_fd_imag[n] = round( y[n] * self.w[n].imag / self.scale )
+        self.y_z2 = copy( self.y_z1 )
+        self.y_z1 = copy(y)
+        y_out = np.array([ complex(y_fd_real[n], y_fd_imag[n]) for n in range(self.N) ])
+        if( self.hanning_en ):
+            y_out = self.hann_in_freq( y_out )
+        return y_out
+
+
+# This model is for the case when we need only the real part of the product.
+# We remember that DFT's real n=[N/2-N) values are [0-N/2) values mirrored over
+# N/2. Then, if we compute [N/2-N) bins, it may be extra information, since we
+# already have this information in [0-N/2). In a case we really need it we might
+# just reverse it. The next step is to get rid from the imaginary part inside
+# computation loop, because it costs a lot of memeory. Idk how to do it now,
+# relation with DCT is under research
+class SdftIntReal:
+    def __init__( self, N, bitwidth=32, hanning_en=False ):
+        self.bitwidth    = bitwidth
+        self.scale       = 2**(bitwidth-1)
+        self.N           = N
+        self.hanning_en  = hanning_en
+        self.x           = np.zeros( N, dtype=int   )
+        self.y_prev      = np.zeros( N//2, dtype=complex )
+        self.w           = twiddle_generator_int( N, 'inverse', bitwidth )[:N//2]
+
+    def hann_in_freq( self, x ):
+        local_N = self.N//2
+        y = np.zeros_like( x )
+        y[0] = 0.5 * x[0] - 0.25 * x[1]
+        for n in range( 1, local_N-1 ):
+            y[n] = 0.5 * x[n] - 0.25 * ( x[n-1] + x[n+1])
+        y[local_N-1] = 0.5 * x[local_N-1] - 0.25 * x[local_N-2]
+        return y
+
+    def __call__( self, xn ):
+        xz     = self.x[-1]
+        self.x = np.append( xn, self.x[:-1] )
+        comb   = complex( xn-xz, 0. )
+        y = np.zeros( (self.N//2), dtype=complex )
+        for n in range( (self.N//2) ):
+            y_comb  = comb + self.y_prev[n] # bitwidth + 2
+            y[n]    = round( y_comb * self.w[n] / self.scale ) # bitwidth + 2
+            #y[n] = sat( y[n], self.bitwidth )
+        self.y_prev = copy(y)
+        if( self.hanning_en ):
+            y = self.hann_in_freq( y )
+        return y.real
 
 # It is not reasonable to use anything but 'midpoint' mode, but I left the
 # option to choose different block to reconstruct window with in sake of

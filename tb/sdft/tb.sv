@@ -54,7 +54,9 @@ bit stop_flag;
 localparam RE = 0;
 localparam IM = 1;
 
-localparam OUTPUT_WIDTH = DATA_WIDTH + 10;
+localparam IDW = DATA_WIDTH*2;
+
+localparam OUTPUT_WIDTH = IDW;
 
 logic signed [DATA_WIDTH-1:0]     data_i;
 logic signed [OUTPUT_WIDTH*2-1:0] data_tmp;
@@ -187,12 +189,10 @@ task automatic scoreboard( );
           ref2_acc_im   += int'(reference_data[IM])*int'(reference_data[IM]);
           nmse_re        = nmse_str( error2_acc_re, ref2_acc_re );
           nmse_im        = nmse_str( error2_acc_im, ref2_acc_im );
-          max_error_re  = `max( max_error_re, `abs( error_re ) );
-          max_error_im  = `max( max_error_im, `abs( error_im ) );
-          peak_error_re  = ( real'(max_error_re) / real'(2**OUTPUT_WIDTH)  ) * 100;
-          peak_error_im  = ( real'(max_error_im) / real'(2**OUTPUT_WIDTH)  ) * 100;
-//          peak_error_re  = 0; // ( real'(max_error_re) / real'(2**OUTPUT_WIDTH)  ) * 100;
-//          peak_error_im  = 0; // ( real'(max_error_im) / real'(2**OUTPUT_WIDTH)  ) * 100;
+          max_error_re   = `max( max_error_re, `abs( error_re ) );
+          max_error_im   = `max( max_error_im, `abs( error_im ) );
+//          peak_error_re  = ( real'(max_error_re) / real'(2**OUTPUT_WIDTH)  ) * 100;
+//          peak_error_im  = ( real'(max_error_im) / real'(2**OUTPUT_WIDTH)  ) * 100;
           $sformat( score, "%d samples processed, nmse (im/re): %s / %s dB, peak error (im/re): %f / %f  %%",
             cnt, nmse_im, nmse_re, peak_error_im, peak_error_re );
         end
@@ -219,26 +219,29 @@ initial
 //***************************************************************************
 
 sdft #(
+  .ARCHITECTURE         ( ARCHITECTURE                ),
   .N                    ( RADIX                       ),
   .DW                   ( DATA_WIDTH                  ),
   .CW                   ( COEFFICIENT_WIDTH           ),
-  .IDW                  ( DATA_WIDTH*2                ),
-  .OW                   ( OUTPUT_WIDTH                ),
+  .IDW                  ( IDW                         ),
+  .IMAG_EN              ( 1                           ),
   .HANNING_EN           ( HANNING_EN                  ),
   .FIX_EN               ( 1                           ),
   .FIX                  ( 2**(DATA_WIDTH-1)-1         ),
+  .SPECTRUM             ( "full"                      ),
   .TWIDDLE_ROM_FILE     ( "sdft_twiddles.mem"         )
 ) DUT (
   .clk_i                ( clk                         ),
   .srst_i               ( srst                        ),
   .sample_tick_i        ( input_valid                 ),
   .data_i               ( data_i                      ),
-  .rdaddr_o             (                             ),
-  .rddata_i             (                             ),
+  .twiddle_idx_o        (                             ),
+  .twiddle_i            (                             ),
   .data_o               ( data_tmp                    ),
   .sob_o                (                             ),
   .eob_o                (                             ),
-  .valid_o              ( output_valid                )
+  .valid_o              ( output_valid                ),
+  .sat_alarm_o          (                             )
 );
 
 assign data_o[RE] = data_tmp[OUTPUT_WIDTH-1:0];

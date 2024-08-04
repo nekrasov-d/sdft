@@ -36,9 +36,9 @@ import sys
 import os
 import subprocess
 cwd = os.getcwd()
-sys.path.append( cwd + "/../../python_model/")
-#from python_model.sdft import SdftInt
-from sdft import SdftInt
+sys.path.append( cwd + "/../../python/")
+from models import SdftInt
+from models import SdftIntRL
 from utility_functions import twiddle_generator_int
 from utility_functions import twiddles_to_mem
 
@@ -50,8 +50,9 @@ RADIX                    = 256
 DATA_WIDTH               = 16
 COEFFICIENT_WIDTH        = 16
 HANNING_EN               = 0
+ARCHITECTURE             = ( "default", "rl" )[1]
 CLK_PER_SAMPLE           = RADIX+1
-TESTBENCH_MODE           = ( "manual", "automatic" )[0]
+TESTBENCH_MODE           = ( "manual", "automatic" )[1]
 TWIDDLE_ROM_FILE         = "sdft_twiddles.mem"
 
 # Could be static if project has fixed RTL files set
@@ -60,6 +61,9 @@ RTL_SOURCES = [
   '../../rtl/ram.sv',
   '../../rtl/rom.sv',
   '../../rtl/rotator.sv',
+  '../../rtl/hanning_fd.sv',
+  '../../rtl/sdft_default.sv',
+  '../../rtl/sdft_rl.sv',
   '../../rtl/sdft.sv'
 ]
 
@@ -71,6 +75,7 @@ f.write(f"parameter DATA_WIDTH        = {DATA_WIDTH};\n")
 f.write(f"parameter COEFFICIENT_WIDTH = {COEFFICIENT_WIDTH};\n")
 f.write(f"parameter RADIX             = {RADIX};\n")
 f.write(f"parameter HANNING_EN        = {HANNING_EN};\n")
+f.write(f'parameter ARCHITECTURE      = "{ARCHITECTURE}";\n')
 f.write(f'parameter CLK_PER_SAMPLE    = {CLK_PER_SAMPLE};\n')
 f.write(f'parameter TEST_DATA_FNAME   = "input.txt";\n')
 f.write(f'parameter REF_DATA_RE_FNAME = "ref_data_re.txt";\n')
@@ -92,7 +97,7 @@ twiddles_to_mem( TWIDDLE_ROM_FILE, w, COEFFICIENT_WIDTH )
 ############################################################################
 # Prepare test data
 
-N = RADIX * 3
+N = RADIX * 30
 
 min_val = -2**(DATA_WIDTH-1)
 max_val =  2**(DATA_WIDTH-1)-1
@@ -101,13 +106,17 @@ sigma   = max_val / 8
 rng = np.random.default_rng()
 test_data = np.clip( rng.normal( 0.0, sigma, N ), min_val, max_val )
 
-sdft = SdftInt( RADIX, bitwidth=DATA_WIDTH, hanning_en=(HANNING_EN==1) )
+if( ARCHITECTURE=="default" ):
+    sdft = SdftInt( RADIX, bitwidth=DATA_WIDTH, hanning_en=(HANNING_EN==1) )
+else:
+    sdft = SdftIntRL( RADIX, bitwidth=DATA_WIDTH, hanning_en=(HANNING_EN==1) )
 
 reference_data = np.array( [sdft(test_data[i]) for i in range(N) ] )
 
-# The first block is empty because of 1 block cycle delay. Insert this empty
-# output into reference data to emulate dut behaviour
-reference_data = np.insert( reference_data, 0, np.zeros(RADIX), axis=0 )[:-1]
+if( ARCHITECTURE=="default" ):
+    # The first block is empty because of 1 block cycle delay. Insert this empty
+    # output into reference data to emulate dut behaviour
+    reference_data = np.insert( reference_data, 0, np.zeros(RADIX), axis=0 )[:-1]
 
 td  = open( "input.txt", "w" )
 for i in range(N):

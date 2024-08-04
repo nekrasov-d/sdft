@@ -102,8 +102,8 @@ generate
     2'b01 :
       if( SEL < (IW-OW) && SAT_EN )
         begin
-          sat_sdft #( .IW(IW-SEL), .OW(OW) ) sat_re ( x_re[IW-1:SEL], y_re, sa_re );
-          sat_sdft #( .IW(IW-SEL), .OW(OW) ) sat_im ( x_im[IW-1:SEL], y_im, sa_im );
+          sat #( .IW(IW-SEL), .OW(OW) ) sat_re ( x_re[IW-1:SEL], y_re, sa_re );
+          sat #( .IW(IW-SEL), .OW(OW) ) sat_im ( x_im[IW-1:SEL], y_im, sa_im );
         end
       else
         begin

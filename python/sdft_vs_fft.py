@@ -24,26 +24,46 @@
 #
 # ---------------------------------------------------------------------------------
 #
-# A script to generate twiddle ROM memory image (Verilog .mem format). The
-# parameters (UPPERCASE variables) are self-describing.
+# Some SDFT design testing routine mentioned in ../README.md
 #
-# XXX: This is not the optimal way to store twiddles, because one quarter of
-# sine wave in memory + some trivial arithmetics to select proper quadrant and
-# turn sine into cosine if needed would be enough. Anyway, the work in this
-# repo doesn't focus on optimal twiddle generation, only gives a basic solution.
-# I would suggest to use my coric-based sine/cosine generator to produce
-# twiddles:
-#
-# -- Dmitry Nekrasov <bluebag@yandex.ru>   Fri, 10 May 2024 14:39:59 +0300
+#  -- Dmitry Nekrasov <bluebag@yandex.ru>   Sat, 13 Apr 2024 10:36:39 +0300
 
 import numpy as np
-from python.utility_functions import twiddle_generator_int
-from python.utility_functions import twiddles_to_mem
+import matplotlib.pyplot as plt
+from models import *
+from utility_functions import *
 
-RADIX    = 2**12
-BITWIDTH = 18
-ORDER    = ("forward", "inverse")[1]
-FNAME    = f"twiddles_{BITWIDTH}b_{RADIX}.mem"
+# Data width and bit with goes as synonymous
+DW = 18
+R  = 256 # RADIX
+N  = 2**9 # Amount of test samples
 
-w = twiddle_generator_int( RADIX, ORDER, BITWIDTH )
-twiddles_to_mem( FNAME, w, BITWIDTH )
+min_val = -2**(DW-1)
+max_val =  2**(DW-1)-1
+
+x = np.random.randint( min_val//32, max_val//32, N )
+sdft = SdftInt( R, bitwidth=DW, hanning_en=False )
+
+# rectangle window (default)
+wx = np.array( [ np.append([0.]*(R-1),x)[i:i+R] for i in range(N) ] )
+wx = hanning_td( wx, R )
+ref = np.array( [ np.fft.fft( wx[i] ) for i in range(N) ] )
+f   = np.array( [ sdft(x[i])          for i in range(N) ] )
+
+f   = hanning_fd( f, N, R )
+#ref = complex_to_real( ref, N, R )
+#f   = complex_to_real( f,   N, R )
+
+#f = smoothing_fd( f, R, N, a=0.01, b=0.99 )
+
+print( "NMSE: re: %3f dB im: %3f dB"         % nmse_fd       ( f, ref, N, R ) )
+print( "Peak error : re: %3f %% im: %3f %% " % peak_error_fd ( f, ref, N, R, DW) )
+#a = abs(f[-1])
+#b = abs(ref[-1])
+a = abs(f[:,112])
+b = abs(ref[:,112])
+plt.plot( a, color='red', label='sdft')
+plt.plot( b, color='blue', label='fft', linestyle='--')
+plt.legend()
+plt.show()
+

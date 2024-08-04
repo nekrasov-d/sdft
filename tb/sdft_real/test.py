@@ -37,8 +37,7 @@ import os
 import subprocess
 cwd = os.getcwd()
 sys.path.append( cwd + "/../../python/")
-from models import SdftInt
-from models import SsidftInt
+from sdft import SdftIntReal
 from utility_functions import twiddle_generator_int
 from utility_functions import twiddles_to_mem
 
@@ -50,25 +49,33 @@ RADIX                    = 256
 DATA_WIDTH               = 16
 COEFFICIENT_WIDTH        = 16
 HANNING_EN               = 0
-CLK_PER_SAMPLE           = RADIX+1
+CLK_PER_SAMPLE           = RADIX//2+1
 TESTBENCH_MODE           = ( "manual", "automatic" )[0]
 TWIDDLE_ROM_FILE         = "sdft_twiddles.mem"
+TEST_DATA_FNAME          = "input.txt"
+REF_DATA_FNAME           = "ref.txt"
 
 # Could be static if project has fixed RTL files set
 RTL_SOURCES = [
-  '../../rtl/sat.sv'
-  '../../rtl/ssidft.sv'
+  '../../rtl/sat.sv',
+  '../../rtl/ram.sv',
+  '../../rtl/rom.sv',
+  '../../rtl/rotator.sv',
+  '../../rtl/hanning_fd.sv',
+  '../../rtl/sdft.sv'
 ]
 
 ############################################################################
 # Translate config to verilog
 
-f = open( "testbench_parameters.v", "w" )
+f = open( "parameters.v", "w" )
 f.write(f"parameter DATA_WIDTH        = {DATA_WIDTH};\n")
+f.write(f"parameter COEFFICIENT_WIDTH = {COEFFICIENT_WIDTH};\n")
 f.write(f"parameter RADIX             = {RADIX};\n")
+f.write(f"parameter HANNING_EN        = {HANNING_EN};\n")
 f.write(f'parameter CLK_PER_SAMPLE    = {CLK_PER_SAMPLE};\n')
-f.write(f'parameter TEST_DATA_FNAME   = "input.txt";\n')
-f.write(f'parameter REF_DATA_FNAME    = "ref.txt";\n')
+f.write(f'parameter TEST_DATA_FNAME   = "{TEST_DATA_FNAME}";\n')
+f.write(f'parameter REF_DATA_FNAME    = "{REF_DATA_FNAME}";\n')
 f.write(f'parameter TESTBENCH_MODE    = "{TESTBENCH_MODE}";\n')
 f.close()
 
@@ -78,32 +85,41 @@ for i in range(len(RTL_SOURCES)):
 f.close()
 
 ############################################################################
+# Prepare twiddles rom
+
+w = twiddle_generator_int( RADIX, order='inverse', bitwidth=COEFFICIENT_WIDTH )[:RADIX//2]
+twiddles_to_mem( TWIDDLE_ROM_FILE, w, COEFFICIENT_WIDTH )
+
+############################################################################
 # Prepare test data
 
-N = RADIX * 10
+N = RADIX * 3
 
 min_val = -2**(DATA_WIDTH-1)
 max_val =  2**(DATA_WIDTH-1)-1
-sigma   = max_val / 4
+sigma   = max_val / 8
 
-rng = np.random.default_rng(seed=123)
+rng = np.random.default_rng()
 test_data = np.clip( rng.normal( 0.0, sigma, N ), min_val, max_val )
 
-sdft   = SdftInt( RADIX, bitwidth=DATA_WIDTH, hanning_en=(HANNING_EN==1) )
-ssidft = SsidftInt( RADIX )
+sdft = SdftIntReal( RADIX, bitwidth=DATA_WIDTH, hanning_en=(HANNING_EN==1) )
 
-freq_domain_data = np.array([ sdft(test_data[i])        for i in range(N) ])
-reference_data = np.array([ ssidft(freq_domain_data[i]) for i in range(N) ])
+reference_data = np.array( [sdft(test_data[i]) for i in range(N) ] )
 
+# The first block is empty because of 1 block cycle delay. Insert this empty
+# output into reference data to emulate dut behaviour
+reference_data = np.insert( reference_data, 0, np.zeros(RADIX//2), axis=0 )[:-1]
 
-td = open( "input.txt", "w" )
-rd = open( "ref.txt", "w" )
+td  = open( TEST_DATA_FNAME, "w" )
 for i in range(N):
     td.write( "%d\n" % test_data[i] )
-    rd.write( "%d\n" % reference_data[i] )
 td.close()
-rd.close()
 
+rd_re = open( REF_DATA_FNAME, "w" )
+for i in range(N):
+    for j in range(RADIX//2):
+        rd_re.write( "%d\n" % reference_data[i,j] )
+rd_re.close()
 
 if( TESTBENCH_MODE == "automatic" ):
     run_vsim = "vsim -c -do make.tcl"
@@ -123,10 +139,11 @@ if( TESTBENCH_MODE == "automatic" ):
     f.close()
     # clean
     try:
-        os.remove("testbench_parameters.v")
+        os.remove(TWIDDLE_ROM_FILE)
+        os.remove("parameters.v")
         os.remove("files")
-        os.remove("input.txt")
-        os.remove("ref.txt")
+        os.remove(TEST_DATA_FNAME)
+        os.remove(REF_DATA_FNAME)
         os.remove("score.txt")
         os.remove("transcript")
         os.remove("vsim.wlf")

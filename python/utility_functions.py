@@ -62,6 +62,21 @@ def sat( x, target_bitwidth ):
 
 
 def nmse_fd( x, ref, N, R ):
+    if( len( x.shape ) != 2 ):
+        print( "nmse_fd : wrong data shape" )
+        exit()
+    if( type( x[0,0] ) not in { np.float64, np.complex128 } ):
+        print( "nmse_fd : wrong data type" )
+        exit()
+    nmse = lambda a,b : 0. if any( [a==0, b==0] ) else 10 * np.log10( a / b )
+    if( type( x[0,0] ) == np.float64 ):
+        error_acc = 0
+        ref_acc   = 0
+        for t in range(N):
+            for k in range(R):
+                error_acc += ( x[t,k]- ref[t,k] )**2
+                ref_acc   += ref[t,k]**2
+        return nmse( error_acc, ref_acc), 0.
     error_re_acc = 0
     error_im_acc = 0
     ref_re_acc   = 0
@@ -72,8 +87,8 @@ def nmse_fd( x, ref, N, R ):
             error_im_acc += ( x[t,k].imag - ref[t,k].imag )**2
             ref_re_acc   += ref[t,k].real**2
             ref_im_acc   += ref[t,k].imag**2
-    nmse_re = 10 * np.log10( error_re_acc / ref_re_acc )
-    nmse_im = 10 * np.log10( error_im_acc / ref_im_acc )
+    nmse_re = nmse( error_re_acc, ref_re_acc )
+    nmse_im = nmse( error_im_acc, ref_im_acc )
     return nmse_re, nmse_im
 
 
@@ -98,12 +113,13 @@ def hanning_td( x, R ):
 
 
 def hanning_fd( x, N, R ):
+    y = np.zeros_like( x )
     for t in range(N):
-        x[t,0] = 0.5 * x[t,0] - 0.25 * x[t,1]
+        y[t,0] = 0.5 * x[t,0] - 0.25 * x[t,1]
         for n in range(1,R-1):
-            x[t,n] = 0.5 * x[t,n] - 0.25 * ( x[t,n-1] + x[t,n+1] )
-        x[t,R-1] = 0.5 * x[t,R-1] - 0.25 * x[t,R-2]
-    return x
+            y[t,n] = 0.5 * x[t,n] - 0.25 * ( x[t,n-1] + x[t,n+1] )
+        y[t,R-1] = 0.5 * x[t,R-1] - 0.25 * x[t,R-2]
+    return y
 
 
 def smoothing_fd( x, R, N, a=0.1, b=0.9):
@@ -116,7 +132,7 @@ def smoothing_fd( x, R, N, a=0.1, b=0.9):
     return y
 
 
-def complex_to_real( x ):
+def complex_to_real( x, N, R  ):
     y = np.zeros_like( x, dtype=float )
     for t in range(N):
         for n in range(R):

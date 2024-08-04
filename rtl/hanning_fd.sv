@@ -30,33 +30,32 @@
 `include "defines.vh"
 
 module hanning_fd #(
-  parameter DW = 0
+  parameter DW           = 0,
+  parameter IMAG_PART_EN = 0,
+  parameter IODW         = IMAG_PART_EN ? DW*2 : DW
 ) (
   input                   clk_i,
-  input        [DW*2-1:0] data_i,
+  input        [IODW-1:0] data_i,
   input                   sob_i,
   input                   eob_i,
   input                   valid_i,
-  output logic [DW*2-1:0] data_o,
+  output logic [IODW-1:0] data_o,
   output logic            sob_o,
   output logic            eob_o,
   output logic            valid_o
 );
 
-localparam RE = 0;
-localparam IM = 1;
-
 logic sob_d, eob_d, valid_d;
-logic signed [1:0][DW-1:0] z0     ;
-logic signed [1:0][DW-1:0] z1     ;
-logic signed [1:0][DW-1:0] z2     ;
-logic signed [1:0][DW-3:0] z0_025 ;
-logic signed [1:0][DW-2:0] z1_05  ;
-logic signed [1:0][DW-3:0] z2_025 ;
-logic signed [1:0][DW-2:0] z0_z2  ;
-logic signed [1:0][DW-1:0] h      ;
+logic signed [DW-1:0] z0_re, z0_im;
+logic signed [DW-1:0] z1_re;
+logic signed [DW-1:0] z2_re;
+logic signed [DW-3:0] z0_025_re;
+logic signed [DW-2:0] z1_05_re;
+logic signed [DW-3:0] z2_025_re;
+logic signed [DW-2:0] z0_z2_re;
+logic signed [DW-1:0] h_re;
 
-//*****************************************************************
+//****************************************************************
 
 always_ff @( posedge clk_i )
   begin
@@ -65,28 +64,41 @@ always_ff @( posedge clk_i )
     valid_d <= valid_i;
   end
 
-assign { z0[IM], z0[RE] } = data_i;
+assign { z0_im, z0_re } = valid_i ? data_i : '0;
 
 always_ff @( posedge clk_i )
-  begin
-    { z1[IM], z1[RE] } = { z0[IM], z0[RE] };
-    { z2[IM], z2[RE] } = { z1[IM], z1[RE] };
-  end
+  { z2_re, z1_re } <= { z1_re, z0_re };
 
-assign z0_025[RE] = `s(z0[RE] >> 2);
-assign z0_025[IM] = `s(z0[IM] >> 2);
-assign z1_05 [RE] = `s(z1[RE] >> 1);
-assign z1_05 [IM] = `s(z1[IM] >> 1);
-assign z2_025[RE] = `s(z2[RE] >> 2);
-assign z2_025[IM] = `s(z2[IM] >> 2);
+assign z0_025_re = z0_re >>> 2;
+assign z1_05_re  = z1_re >>> 1;
+assign z2_025_re = z2_re >>> 2;
+assign z0_z2_re  = z0_025_re + z2_025_re;
+assign h_re      = z1_05_re  - z0_z2_re;
 
-assign z0_z2[RE] = `s(z0_025[RE]) + `s(z2_025[RE]);
-assign z0_z2[IM] = `s(z0_025[IM]) + `s(z2_025[IM]);
-
-assign h[RE] = `s(z1_05[RE]) - `s(z0_z2[RE]);
-assign h[IM] = `s(z1_05[IM]) - `s(z0_z2[IM]);
-
-assign data_o = {h[IM], h[RE]};
+generate
+  if( IMAG_PART_EN )
+    begin : imag_part
+      logic signed [DW-1:0] z1_im;
+      logic signed [DW-1:0] z2_im;
+      logic signed [DW-3:0] z0_025_im;
+      logic signed [DW-2:0] z1_05_im;
+      logic signed [DW-3:0] z2_025_im;
+      logic signed [DW-2:0] z0_z2_im;
+      logic signed [DW-1:0] h_im;
+      always_ff @( posedge clk_i )
+        { z2_im, z1_im } <= { z1_im, z0_im };
+      assign z0_025_im = z0_im >>> 2;
+      assign z1_05_im  = z1_im >>> 1;
+      assign z2_025_im = z2_im >>> 2;
+      assign z0_z2_im  = z0_025_im + z2_025_im;
+      assign h_im      = z1_05_im  - z0_z2_im;
+      assign data_o    = {h_im, h_re};
+    end // imag_part
+  else
+    begin : no_imag_part
+      assign data_o = h_re;
+    end // no_imag_part
+endgenerate
 
 assign sob_o   = sob_d;
 assign eob_o   = eob_d;

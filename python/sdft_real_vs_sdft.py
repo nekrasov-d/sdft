@@ -30,42 +30,48 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from sdft import *
+from models import *
 from utility_functions import *
 
 # Data width and bit with goes as synonymous
 DW = 18
 R  = 256 # RADIX
-N  = 2**12 # Amount of test samples
+N  = 2**9 # Amount of test samples
 
 min_val = -2**(DW-1)
 max_val =  2**(DW-1)-1
 
 x = np.random.randint( min_val//32, max_val//32, N )
-sdft = SdftInt( R, bitwidth=DW, hanning_en=False )
+sdft      = SdftInt    ( R, bitwidth=DW, hanning_en=False )
+sdft_real = SdftIntReal( R, bitwidth=DW, hanning_en=False )
 
-# rectangle window (default)
-wx = np.array( [ np.append([0.]*(R-1),x)[i:i+R] for i in range(N) ] )
+ref    = np.array( [ sdft(x[i])        for i in range(N) ] )
+f_half = np.array( [ sdft_real( x[i] ) for i in range(N) ] )
 
-#wx = hanning_td( wx, R )
+f = np.zeros( ( f_half.shape[0], f_half.shape[1]*2 ), dtype=float )
 
-ref = np.array( [ np.fft.fft( wx[i] ) for i in range(N) ] )
-f   = np.array( [ sdft(x[i])          for i in range(N) ] )
+for i in range( len( f_half ) ):
+    # We lose N/2 bin because we want to calculate N/2 bins, not N/2+1
+    # to reduce complexity. One additional bin would cost non-proportional
+    # recource utilization increasing. It is reasonable tradeoff.
+    #
+    # tmp = np.append( f_half[i].real, 0 )
+    #
+    # But, because we aware of that, we don't take this as an error. We need to
+    # find some real (unexpected) errors, so we loan this bin value from
+    # reference.
+    tmp = np.append( f_half[i], ref[i].real[R//2] )
+    f[i] = np.append( tmp, f_half[i][:0:-1] )
 
-#ref = hanning_fd( ref, N, R )
-#f   = hanning_fd( f, N, R )
 
-#ref = complex_to_real( ref )
-#f   = complex_to_real( f  )
+#ref = hanning_fd     ( ref, N, R )
+#f   = hanning_fd     ( f,   N, R )
+ref = complex_to_real( ref, N, R )
 
-#f = smoothing_fd( f, R, N, a=0.01, b=0.99 )
+plt.plot( ref[-1], color='blue' )
+plt.plot( f[-1],   color='red', linestyle='dashed' )
+plt.show()
+exit()
 
 print( "NMSE: re: %3f dB im: %3f dB"         % nmse_fd       ( f, ref, N, R ) )
 print( "Peak error : re: %3f %% im: %3f %% " % peak_error_fd ( f, ref, N, R, DW) )
-a = abs(f[:,112])
-b = abs(ref[:,112])
-plt.plot( a, color='red', label='sdft')
-plt.plot( b, color='blue', label='fft', linestyle='--')
-plt.legend()
-plt.show()
-

@@ -40,13 +40,14 @@ module ssidft #(
   input                 sob_i,
   input                 eob_i,
   input signed [DW-1:0] freq_re_i,
-  input signed [DW-1:0] freq_im_i,
   output logic [OW-1:0] sample_o,
   output logic          sample_en_o
 );
 
-logic [AW-1:0] counter;
-logic active;
+logic signed [DW+AW-1:0] acc;
+logic           [AW-1:0] counter;
+logic                    active;
+logic                    eob_d;
 
 assign active = sob_i | ( counter != '0 );
 
@@ -57,7 +58,6 @@ always_ff @( posedge clk_i )
     if( active )
       counter <= counter + 1'b1;
 
-logic signed [DW+AW-1:0] acc;
 
 always_ff @( posedge clk_i )
   if( sob_i )
@@ -70,16 +70,21 @@ always_ff @( posedge clk_i )
 
 //********************************************************************
 
-logic eob_d;
 
 always_ff @( posedge clk_i )
   eob_d <= eob_i;
 
-localparam M = 10;
+localparam M = 5;
+
+logic [OW-1:0] acc_sat;
+logic sat_alarm;
+
+sat #( .IW(DW+AW-5), .OW(OW) ) sat ( acc[DW+AW-1:5], acc_sat, sat_alarm );
 
 always_ff @( posedge clk_i )
   if( eob_d )
-    sample_o <= `s({ `sign(acc), acc[14:0] });
+    //sample_o <= `s({ `sign(acc), acc[20:6] });
+    sample_o <= acc_sat;
 
 always_ff @( posedge clk_i )
   sample_en_o <= eob_d;

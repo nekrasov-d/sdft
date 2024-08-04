@@ -1,5 +1,3 @@
-#!bin/pythion3
-#
 # MIT License
 #
 # Copyright (c) 2024 Dmitriy Nekrasov
@@ -24,26 +22,31 @@
 #
 # ---------------------------------------------------------------------------------
 #
-# A script to generate twiddle ROM memory image (Verilog .mem format). The
-# parameters (UPPERCASE variables) are self-describing.
+# Compile Verilog files and launch vsim
 #
-# XXX: This is not the optimal way to store twiddles, because one quarter of
-# sine wave in memory + some trivial arithmetics to select proper quadrant and
-# turn sine into cosine if needed would be enough. Anyway, the work in this
-# repo doesn't focus on optimal twiddle generation, only gives a basic solution.
-# I would suggest to use my coric-based sine/cosine generator to produce
-# twiddles:
+# See the main README.md
 #
-# -- Dmitry Nekrasov <bluebag@yandex.ru>   Fri, 10 May 2024 14:39:59 +0300
+# vsim -do make.tcl
 
-import numpy as np
-from python.utility_functions import twiddle_generator_int
-from python.utility_functions import twiddles_to_mem
+vlib work
+quit -sim
 
-RADIX    = 2**12
-BITWIDTH = 18
-ORDER    = ("forward", "inverse")[1]
-FNAME    = f"twiddles_{BITWIDTH}b_{RADIX}.mem"
+# files list with RTL sources (relative path) is created automatically, but
+# could be created by hand as well
+vlog -quiet -sv -f files
+vlog -quiet -sv tb.sv
 
-w = twiddle_generator_int( RADIX, ORDER, BITWIDTH )
-twiddles_to_mem( FNAME, w, BITWIDTH )
+vsim -quiet tb -suppress 3116 -suppress 3691
+
+if [file exists "wave.do"] {
+  do wave.do
+}
+
+add log -r /tb/*
+run -all
+
+if [batch_mode] {
+  set score [exa /score]
+  exec echo $score > score.txt
+  quit -f
+}
